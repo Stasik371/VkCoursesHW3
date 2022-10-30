@@ -9,6 +9,8 @@ import com.google.inject.Inject;
 import com.google.inject.Injector;
 import controller.InjectionModule;
 import controller.Library;
+import exceptions.EmptyCellException;
+import exceptions.IncorrectArgumentException;
 import models.Author;
 import models.Book;
 import org.jetbrains.annotations.NotNull;
@@ -21,14 +23,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.*;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Collections;
 
 
 public class MainTests {
 
-
-    @Inject
-    @NotNull
-    BooksFactory booksFactory;
 
     @NotNull
     private static Library library;
@@ -44,22 +43,24 @@ public class MainTests {
     private static final String PATH_TO_FILE = "src/test/resources/books.json";
 
     @NotNull
-    private static final Book testBook = new Book(new Author("Test1"), "Test1");
+    private static final Book testBook = new Book(new Author("TestTest"), "TestTest");
 
 
     @BeforeEach
-    public void beforeEachTests() throws FileNotFoundException {
+    public void beforeEachTests() throws FileNotFoundException, IncorrectArgumentException {
         final Injector injector = Guice.createInjector(new InjectionModule("books.json"));
         injector.injectMembers(this);
         final var mockBooksFactory = Mockito.mock(BooksFactory.class);
         booksFromBookFabric = new Gson().fromJson(new BufferedReader(new FileReader(PATH_TO_FILE)), listBooksType);
-        Mockito.when(mockBooksFactory.books()).thenReturn((ArrayList<Book>) booksFromBookFabric);
-        library = new Library(((ArrayList<Book>) booksFromBookFabric).size() + 1, mockBooksFactory);
+        Mockito.when(mockBooksFactory.books()).thenReturn(booksFromBookFabric);
+        library = new Library((booksFromBookFabric).size() + 1, mockBooksFactory);
+        library.getArrayListOfEmptyCells().clear();
+        library.getArrayListOfEmptyCells().add(5);
     }
 
     @DisplayName("При взятии книги информация о ней и ячейке выводится.")
     @Test
-    public void infoAboutTakenBook() {
+    public void infoAboutTakenBook() throws IncorrectArgumentException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         System.setOut(new PrintStream(output));
         String expRes = "Book was taken: " + library.getJSONBook(library.getCells()[0], 0) + "\r\n";
@@ -70,14 +71,14 @@ public class MainTests {
     @DisplayName("При попытке взять книгу из пустой ячейки библиотека бросает исключение")
     @Test
     public void getBookFromEmptyCell() {
-        assertThrows(IllegalArgumentException.class, () -> library.getBookFromCell(5));
+        assertThrows(IncorrectArgumentException.class, () -> library.getBookFromCell(5));
     }
 
     @DisplayName("Если при добавлении книги свободных ячеек нет, библиотека бросает исключение.")
     @Test
-    public void setBookToEmptyCell() {
+    public void setBookToEmptyCell() throws EmptyCellException {
         library.addBookToCell(testBook);
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(EmptyCellException.class,
                 () -> library.addBookToCell(testBook));
     }
 
@@ -100,11 +101,12 @@ public class MainTests {
 
     @DisplayName("При добавлении книги она размещается в первой свободной ячейке.")
     @Test
-    public void firstCellWhenAdd() {
-        int expIndex = 0, actIndex = -1;
-        library.getBookFromCell(expIndex);
+    public void firstCellWhenAdd() throws IncorrectArgumentException, EmptyCellException {
+        library.getBookFromCell(0);
+        int expIndex = Collections.min(library.getArrayListOfEmptyCells()), actIndex = -1;
+        library.addBookToCell(testBook);
         for (int i = 0; i < library.getCells().length; i++) {
-            if (library.getCells()[i] == null) {
+            if (library.getCells()[i] == testBook) {
                 actIndex = i;
                 break;
             }
@@ -114,7 +116,7 @@ public class MainTests {
 
     @DisplayName("При взятии книги возвращается именно та книга, что была в этой ячейке.")
     @Test
-    public void sameBookFromCell() {
+    public void sameBookFromCell() throws IncorrectArgumentException {
         Book expBook = library.getCells()[0];
         Book actBook = library.getBookFromCell(0);
         assertThat(expBook, is(actBook));
